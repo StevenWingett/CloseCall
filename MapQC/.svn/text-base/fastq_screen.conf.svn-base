@@ -1,0 +1,56 @@
+# This is a configuration file for fastq_screen
+
+###########
+## Bowtie #
+###########
+## If the bowtie binary is not in your PATH then you can 
+## set this value to tell the program where to find it.
+## Uncomment the line below and set the appropriate location
+##
+
+BOWTIE	bowtie
+#BOWTIE2 /usr/local/bowtie2/bowtie2
+
+############
+## Threads #
+############
+## Bowtie can be made to run across multiple CPU cores to
+## speed up your searches. Set this value to the number
+## of cores you want to use for your searches.
+
+THREADS		10
+
+##############
+## Databases #
+##############
+## This section allows you to configure multiple databases
+## to search against in your screen.  For each database
+## you need to provide a database name (which can't contain
+## spaces) and the location of the bowtie indices which 
+## you created for that database.
+## 
+## The default entries shown below are only suggested examples
+## you can add as many DATABASE sections as you like, and you
+## can comment out or remove as many of the existing entries
+## as you like.
+##
+## To use Bowtie2 instead of the original Bowtie, add 
+## 'BOWTIE2' after the path to the indices basename.
+## For example:
+## DATABASE	Human	/data/public/Genomes/Human/GRCh37/Homo_sapiens.GRCh37 BOWTIE2
+
+
+##########
+##Human
+DATABASE 	Human 	/bi/scratch/Genomes/Human/GRCh38/Homo_sapiens.GRCh38
+
+##########
+##Human_Repeats - Ensembl NMasked
+DATABASE 	Human_Repeats 	/bi/home/wingetts/anaconda/Data/human_repeats
+
+
+
+
+ 
+
+

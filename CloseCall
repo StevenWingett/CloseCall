@@ -1,0 +1,678 @@
+#!/usr/bin/perl
+
+#############################################
+#A Perl script to manage the CloseCall pipeline
+#############################################
+
+use strict;
+use warnings;
+use FindBin '$Bin';
+use lib $Bin;
+use File::Basename;
+use Getopt::Long;
+use module_anaconda;
+use POSIX;
+
+use Data::Dumper;
+
+#Option variables
+my %config = (config => '', simulations => '', gene_list => '', genome => '', help => '', 
+				map => '', multiple => '', noqc => '', random => '', splice_sites => '', 
+				test => '', version => '');
+
+
+my $config_result = GetOptions(
+					"config=s" => \$config{config},
+					"simulations=i" => \$config{simulations},    #Run Monte Carlo Simulation only
+			      	"gene_list=s" => \$config{gene_list},
+			      	"genome=s" => \$config{genome},
+					"help" => \$config{help},
+					"map" => \$config{map},
+					"multiple" => \$config{multiple},
+					"noqc" => \$config{noqc},
+					"random" => \$config{random},
+					"splice_sites=s" => \$config{splice_sites},
+					"test" => \$config{test},
+					"version" => \$config{version},
+			      );
+
+die "Could not parse options.\n" unless ($config_result);
+
+
+#Print help and exit
+if ( $config{help} ) {
+    print while (<DATA>);
+    exit(0);
+}
+
+
+#Print version and exit
+if ( $config{version} ) {
+    print "CloseCall v$module_anaconda::VERSION\n";
+    exit(0);
+}
+
+
+print "Starting CloseCall ($module_anaconda::VERSION)\n";
+
+#Read the configuration file
+if($config{config}){
+	print "Reading in configuration file '$config{config}'\n";
+	my @problems = process_config($config{config}, \%config);
+	if(scalar @problems){
+		warn "Unexpected terms on configuration file '$config{config}'\n";
+		foreach my $problem (@problems){
+			warn "$problem\n";
+		}
+		die "Please adjust configuration.\n";
+	}
+	
+	print "Configuration settings:\n";
+	foreach my $key (sort keys %config){
+		print "$key:\t$config{$key}\n";
+	}
+}
+
+
+
+
+
+######################################################################################################################
+#Check input
+
+my @files = @ARGV;
+if($config{test}){
+	!system("ln -s $Bin/Data/test_dataset.fastq.gz") or die "Could not execute command: 'ln -s $Bin/Data/test_dataset.fastq.gz'\n";
+	push(@files, "test_dataset.fastq.gz");
+	$config{map} = 1;
+}
+
+if($config{multiple}){    #Perform multiple testing correction only
+	unless(scalar @ARGV == 2){
+		warn "Specify TWO simulation results files to process, 1) results and a 2) control file";
+		warn "The results file may be used as the control, or even better, use the simulated results of a random dataset\n";
+		print while (<DATA>);
+		exit(1);	
+	}
+	
+	my $results_file = $ARGV[0];
+	my $control_file = $ARGV[1];
+	
+	print "Performing multiple testing correction:\n";
+	print "\tResults file: $results_file\n";
+	print "\tControl file: $control_file\n";
+	
+	my $jid = "mtc.$results_file.$control_file";
+	$jid =~ s/\W//g;    #Remove non-alphanumeric characters which may cause problems with cluster submission
+	my $command = "$Bin/Monte_Carlo_Simulation/multiple_testing_correction.pl --results $results_file --control $control_file";
+	my $cluster_command = "qsub -l h_vmem=50G -o multi_test.out -N $jid $command";
+	!system($cluster_command) or die "Could not execute cluster command: $cluster_command\n";
+	
+	print "Producing scatter plot of results\n";
+	$command = "Rscript $Bin/Monte_Carlo_Simulation/RScripts/monteCarloScatterPlot.r >/dev/null";
+	$cluster_command = "qsub -l h_vmem=50G -o scatter_plot.out -N scatter_plot.$jid -hold_jid $jid $command";
+	!system($cluster_command) or die "Could not execute cluster command: $cluster_command\n";
+	
+	print "Sent multiple tesing jobs to cluster.\n";
+	
+	exit(0);
+}
+
+
+unless(@files){
+	warn "Please specify a file to process.\n\n";
+	print while (<DATA>);
+    exit(0);
+}
+die "Please adjust configuration.\n" unless ( check_files_exist(\@files, 'EXISTS') );
+
+
+
+
+
+if($config{random}){
+	print "Creating random dataset(s), ready for Monte Carlo Simulation\n";
+	$config{simulations} = 1;
+	monte_carlo_simulation(@files);
+	exit (0);
+
+}
+
+
+if($config{simulations}){    #Run Monte Carlo Simulation
+	print "Performing CloseCall simulation only\n";
+	monte_carlo_simulation(@files);
+	exit (0);
+}
+
+
+if($config{map}){
+	die "Specify --map OR --simulation, but not both.\n" if $config{simulations};
+}else{
+	die "Please specify --map or --simulation to run the pipeline.\n";
+}
+
+
+if( hasval($config{genome}) or hasval($config{splice_sites}) ){
+	unless( hasval($config{genome}) and hasval($config{splice_sites}) ){
+		die "Please specify BOTH --genome and -splice, or neither (and use defaults).\n"
+	}
+}
+
+unless(-e $config{splice_sites}){
+	die "The --splice file '$config{splice_sites}' does not exist\n";
+}
+
+#$config{gene_list} = "$Bin/Data/human38_genes_and_repeats.txt.gz" unless( hasval ($config{gene_list}) );
+#$config{genome} = '/bi/scratch/Genomes/Human/GRCh38/Homo_sapiens.GRCh38' unless( hasval($config{genome}) );
+#$config{splice_sites} = '/bi/scratch/Genomes/Human/GRCh38/Homo_sapiens.GRCh38.83.splice_sites.txt' unless( hasval($config{splice_sites}) );
+
+
+
+
+
+#####The following were used for the Jorg's data generation#####
+#$config{gene_list} = "$Bin/Data/human38_repeats_RNA45S5.txt.gz" unless( hasval ($config{gene_list}) );    
+#$config{genome} = "$Bin/Data//hg38_LSU_SSU_Masked_RNA45S5" unless( hasval($config{genome}) );
+#$config{splice_sites} = '/bi/scratch/Genomes/Human/GRCh38/Homo_sapiens.GRCh38.78.splice_sites.txt' unless( hasval($config{splice_sites}) );
+#############################
+
+
+
+my $command;
+
+#############################################################################
+#1) Generating features files
+print "\n################# Anaconda Step 1: Generating a modified features file #################\n";
+$command = "$Bin/MapQC/create_features.pl $config{gene_list}";
+!system($command) or die "Could not execute format_features_list.pl with: '$command'\n";
+
+$config{gene_list} = basename( $config{gene_list} );
+my $repeats_file = $config{gene_list} . ".edited_repeats_only.txt.gz";
+$config{gene_list} = $config{gene_list} . ".edited_features.txt.gz";
+
+
+
+#####################################################################################################################
+#2) Confirming reads contain expected fixed sequence: 
+#Valid reads should contain a fixed sequence 'GACACGCAGGGATGAGATGG' after the 26-bp random barcode. 
+#A script was written allowing for a 10% mismatch rate when comparing bases at position 27-46 to the sequence above. 
+print "\n\n\n################# Anaconda Step 2: checking fixed sequence present #################\n";
+$command = "$Bin/MapQC/check_sequence_present.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute check_sequence_present.pl with: '$command'\n";
+
+
+
+###############################################################################
+#3) Check barcode sequence is not "extreme" in terms of nucleotide composition
+#and is free from obvious potential contaminants
+print "\n\n\n################# Anaconda Step 3: Checking for problem barcodes #################\n";
+my @new_files;
+foreach my $file (@files){
+	$file .= '.present.fastq.gz';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/problem_barcodes.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute problem_barcodes.pl with: '$command'\n";
+
+
+
+
+######################################################################################################################
+#4) Created a virtual reference genome of the barcodes and mapped each barcode against this to establish 'Barcode Group' 
+#(Used map_trimmed_barcodes.pl - run on head node as script submits cluster jobs.  Wait for cluster jobs to finish.)
+print "\n\n\n################# Anaconda Step 4: Create a virtual reference genome #################\n";
+@new_files = ();
+foreach my $file (@files){
+	$file =~ s/\.present\.fastq\.gz$//;
+	$file .= '.barcode_pass.fastq.gz';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/map_trimmed_barcodes.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute map_trimmed_barcodes.pl with: '$command'\n";
+
+
+
+
+
+######################################################################################################################
+#5) Take a barcode SAM file (made by map_barcodes.pl) and produces a file relating each barcode to a barcode group.  
+#Uses group_trimmed_barcodes.pl
+print "\n\n\n################# Anaconda Step 5: Allocating barcodes to barcode groups #################\n";
+@new_files = ();
+foreach my $file (@files){
+
+	print "FILE: $file\n";
+
+	my $sam_file = $file;
+	$sam_file =~ s/\.barcode_pass\.fastq\.gz$//;
+	$sam_file .= '.barcode_list.fasta.sam';
+		
+	my $virtual_genome_file = $file;
+	$virtual_genome_file =~ s/\.barcode_pass\.fastq\.gz$//;
+	$virtual_genome_file .= '.barcode_genome.fa';
+	
+	if(-e $sam_file and -e $virtual_genome_file){			
+		$command = "$Bin/MapQC/group_trimmed_barcodes.pl --virtual $virtual_genome_file $sam_file";
+		!system($command) or die "Could not execute group_trimmed_barcodes.pl with: '$command'\n";	
+	}else{
+		warn "File '$sam_file' and/or '$virtual_genome_file' not found, skipping\n";
+	}	
+}
+
+
+######################################################################################################################
+#6) Each genomic read was assigned a barcode group (used assign_read_to_barcode_group.pl)
+print "\n\n\n################# Anaconda Step 6: Allocating each read to a barcode group #################\n";
+$command = "$Bin/MapQC/assign_read_to_barcode_group.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute assign_read_to_barcode_group.pl with: '$command'\n";
+
+
+
+######################################################################################################################
+#7) Trim reads
+print "\n\n\n################# Anaconda Step 7: Trimming reads #################\n";
+@new_files = ();
+foreach my $file (@files){
+	$file .= '.barcoded.fastq';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/trim.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute trim.pl with: '$command'\n";
+
+
+
+#########################################################################################################################
+#8) Perform fastq_screen
+print "\n\n\n################# Anaconda Step 8: Performing FastQ Screen #################\n";
+@new_files = ();
+@new_files = ();
+foreach my $file (@files){
+	$file =~ s/\.barcode_pass\.fastq\.gz\.barcoded\.fastq$//;
+	$file .= '.trimmed.fastq';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+$command = "fastq_screen --nohits --aligner bowtie --conf $Bin/MapQC/fastq_screen.conf ";
+$command .= join(' ', @files);
+!system($command) or warn "Could not execute FastQ Screen with: '$command'\n";
+
+
+##########################################################################################################################
+#9) The genomic reads were mapped against the Human 38 genome using HISAT2
+print "\n\n\n################# Anaconda Step 9: Mapping reads with HISAT2 #################\n";
+foreach my $file (@files){
+	if(-e $file){
+		print "Mapping $file\n";
+		$command =  "$Bin/MapQC/mapper_hisat2.pl --genome $config{genome} --splice $config{splice_sites} $file";
+		!system($command) or die "Could not execute mapper.pl with: '$command'\n";
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+
+
+###################################################################################
+#10) The output from HISAT2 is filtered and counted, depending on whether a
+#read maps, maps uniquely, or whether maps to a pre-specified repeat region
+print "\n\n\n################# Anaconda Step 10: Filtering HISAT2 output #################\n";
+@new_files = ();
+foreach my $file (@files){
+	$file =~ s/\.fastq$//;
+	$file .= '.sam';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/map_editor.pl --repeats $repeats_file ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute map_editor.pl with: '$command'\n";
+
+
+###################################################################################################################################
+#11) The mapped reads SAM file is converted into a condensed format 
+#(used create_data_file_include_noninteracting.pl): 
+print "\n\n\n################# Anaconda Step 11: Creating condensed format file #################\n";
+@new_files = ();
+foreach my $file (@files){
+	$file =~ s/\.trimmed\.sam$//;
+	$file .= '.filtered_reads.bam';	
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/create_data_file_include_noninteracting.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute create_data_file_include_noninteracting.pl with: '$command'\n";
+
+
+
+#####################################################################################################################
+#12) Generated plots: 
+#i) To generate barcode group size histogram ran barcode_group_size.r 
+#ii) To generate cis/trans plot ran createDitags.pl (the new modified version of the script is attached 
+#which ignores barcode groups of size 1 – it is not possible to create di-tags from such reads an consequently 
+#caused the script to crash). Then ran cis_trans_barcode_boxplot.r on the virtual di-tag dataset to create the 
+#boxplot. 
+#iii) To generate cis Hi-C distance plots ran cis_length_calc.pl on the condensed file format generated in
+#step 7 and then ran cis_read_separation_boxplots.r on the newly generated dataset. 
+print "\n\n\n################# Anaconda Step 12: Generating QC plots #################\n";
+
+$command = "Rscript $Bin/MapQC/R_Scripts/barcode_group_size.r >/dev/null";
+!system($command) or die "Could not execute barcode_group_size.r with: '$command'\n";
+
+@new_files = ();
+foreach my $file (@files){
+	$file =~ s/\.filtered_reads\.bam//;
+	$file .= '.condensed_format.txt';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/createDitags.pl ";
+$command .= join(' ', @files);
+!system($command) or warn "Could not execute createDitags.pl with: '$command'\n";
+$command = "Rscript $Bin/MapQC/R_Scripts/cis_trans_barcode_boxplot.r >/dev/null";
+!system($command) or warn "Could not execute cis_trans_barcode_boxplot.r with: '$command'\n";
+
+$command = "$Bin/MapQC/hic_categoriser.pl ";
+$command .= join(' ', @files);
+!system($command) or warn "Could not execute hic_categoriser.pl with: '$command'\n";
+$command = "Rscript $Bin/MapQC/R_Scripts/hic_categoriser.r >/dev/null";
+!system($command) or warn "Could not execute hic_categoriser.r with: '$command'\n";
+
+
+#####################################################################################################################
+#13) Match reads to genes
+print "\n\n\n################# Anaconda Step 13: Allocate reads to genes/features #################\n";
+my $filename_string = join(' ', @files);
+$command = "$Bin/MapQC/identify_reads_by_regions.pl --baits $config{gene_list} $filename_string";
+!system($command) or die "Could not execute identify_reads_by_regions.pl with: '$command'\n";
+
+
+########################################################################################################################
+#14) Remove duplicate gene-gene interactions in same barcode group
+print "\n\n\n################# Anaconda Step 14: Remove duplicate gene-gene interactions in same barcode group #################\n";
+@new_files = ();
+foreach my $file (@files){
+	$file =~ s/\.condensed_format\.txt$//;
+	$file .= '.on_target.txt.gz';
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}
+}
+@files = @new_files;
+$command = "$Bin/MapQC/remove_gene_duplicates.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute remove_gene_duplicates.pl with: '$command'\n";
+
+
+
+#######################################################
+#Format for simulation here
+#15) Allocate identical names to the same class of repeats
+print "\n\n\n################# Anaconda Step 15: Allocate identical names to the same class of repeats, prevent within gene interactions #################\n";
+@new_files = ();
+foreach my $file (@files){
+	    $file =~ s/\.on_target\.txt\.gz//;
+    	$file .= ".uniques.txt.gz";
+		if(-e $file){
+			push(@new_files, $file);
+		}else{
+			warn "File '$file' not found, skipping\n";
+		}	
+}
+
+@files = @new_files;
+$command = "$Bin/MapQC/format_for_simulation.pl --repeats $repeats_file ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute createDitags_features.pl with: '$command'\n";
+
+
+
+##############################################################################
+#16) Create feature-feature virtual ditag files for seqmonk
+print "\n\n\n################# Anaconda Step 16: Create feature-feature virtual ditag files for seqmonk #################\n";
+@new_files = ();
+foreach my $file (@files){
+
+	$file =~ s/\.uniques\.txt\.gz//;
+	$file .= ".simulation_formatted.txt.gz";
+	
+	if(-e $file){
+		push(@new_files, $file);
+	}else{
+		warn "File '$file' not found, skipping\n";
+	}	
+}
+
+@files = @new_files;
+$command = "$Bin/MapQC/createDitags_features.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute createDitags_features.pl with: '$command'\n";
+
+
+##############################################################################
+#17) Create summary stats and obs/expected for each interaction
+print "\n\n\n################# Anaconda Step 17: Create summary stats and obs/expected for each interaction #################\n";
+$command = "$Bin/MapQC/calc_frequeny_interactions.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute calc_frequeny_interactions.pl with: '$command'\n";	
+
+
+#############################################################################
+#18) Report the summary statistics of the whole pipeline
+print "\n\n\n################# Anaconda Step 18: Generating Anaconda pipeline summary results #################\n";
+foreach my $file (@files){    #Generate orignal input filenames
+	$file =~ s/\.simulation_formatted\.txt\.gz//;    #Changes the filename directly
+}
+$command = "$Bin/MapQC/reporter.pl ";
+$command .= join(' ', @files);
+!system($command) or die "Could not execute reporter.pl with: '$command'\n";	
+
+print "CloseCall complete.\n";
+
+exit (0);
+
+
+#################################################################################################
+#Subroutines
+#################################################################################################
+
+
+
+############################
+#Subroutine "process_config":
+#Takes i) configuration file name and ii) %config hash (as a reference).
+#The script then uses the configuration file to populate the hash as
+#appropriate. Parameters passed via the command line take priority
+#over those defined in the configuration file.
+#The script modifies the hash directly, but returns as an array the lines in the configuration
+#file that could did not correspond configuration parameters (these should be filenames).
+sub process_config {
+    my ( $config_file, $config_hash_ref ) = @_;
+    my @non_parameters;    #Stores lines in the configuration file not defined as parameters
+
+    #Open configuration file
+    open( CONF, "$config_file" ) or die "Can't read $config_file: $!";
+
+    while (<CONF>) {
+
+        my $line = $_;
+        chomp $line;
+        $line =~ s/^\s+//;
+        $line =~ s/\s+$//;    #Remove starting/trailing white spaces
+
+        next if $line =~ /^\s*\#/;    #Ignore comments
+        next if $line =~ /^\s*$/;     #Ignore whitespace
+	
+        #Check if this is a parameter
+        my ( $parameter, $setting ) = split( /:/, $line );
+        $parameter =~ s/^\s+//;
+        $parameter =~ s/\s+$//;       #Remove starting/trailing white spaces
+        $parameter = lc $parameter;
+		$setting =~ s/^\s+// if defined ($setting);
+        $setting =~ s/\s+$// if defined ($setting); 
+		
+        if ( exists $$config_hash_ref{$parameter} ) {
+            if ( $$config_hash_ref{$parameter} eq '' ) {    #Check parameter not assigned value in command line
+                $$config_hash_ref{$parameter} = $setting;    #Edit the configuration hash
+            }
+        } else {
+            push( @non_parameters, $line );
+        }
+    }
+    close CONF or die "Could not close filhandle on configuration file: '$config_file'\n";
+
+    return @non_parameters;
+}
+
+
+
+################################################################
+#Sub: monte_carlo_simulation
+#Takes the Anaconda data file(s) as arguments and performs the Monte Carlo Simulation
+#10,000 Simulations per batch
+sub monte_carlo_simulation{
+	my @files = deduplicate_array(@_);
+	my $batch_size;
+	
+	$config{simulations} = abs($config{simulations});
+
+	if($config{simulations} <= 1_000){
+		$batch_size = 50;
+	} elsif($config{simulations} <= 25_000){
+		$batch_size = 500;
+	} elsif($config{simulations} <= 100_000){
+		$batch_size = 5_000;
+	} else {
+		$batch_size = 10_000;
+	}
+
+	
+	if( ($config{simulations} > $batch_size) and ($config{simulations} % $batch_size) ){
+		warn "Number of --simulations needs to be a multiple of 50 (1,000-10,000), 500 (up to 10,000-100,000) 5,000 (up to 100,000) or 10,000\n";
+		warn "Adjusting number of simulations accordingly\n";
+	}
+
+	
+	if($config{simulations} <= 	$batch_size){
+		$config{simulations} = $config{simulations};
+	}else{
+		$config{simulations} = int($config{simulations} / $batch_size) * $batch_size;
+	}
+	
+	print "Setting number of simulations to $config{simulations}\n";
+
+	#Perform simulation - send jobs to cluster
+	my $batches = ceil($config{simulations} / $batch_size);
+	my $simulations_per_batch;
+	if($config{simulations} < $batch_size){
+		$simulations_per_batch = $config{simulations};
+	}else{
+		$simulations_per_batch = $batch_size;
+	}
+	
+	print "Setting simulations per cluster job to $simulations_per_batch\n";
+	print "Maybe a good idea to create a control random dataset and process this now?\n" unless $config{random};
+
+	foreach my $file (@files){
+		my $qc = $config{random} ? 'random' : 'qc';     #Produce QC report (only for batch 1)
+		$qc = '' if $config{noqc};
+		for(my $i = 1; $i <= $batches; $i++){
+			my $command = "java -XX:+UseG1GC -XX:ParallelGCThreads=2 -jar $Bin/Monte_Carlo_Simulation/anacondamontecarlo.jar $file $simulations_per_batch $qc";
+			my $cluster_command = "qsub -l h_vmem=50G -pe cores 2 -N monte_carlo.$file -o monte_carlo.$file.$i.out -p -1 $command";    #Cluster commands with identical names
+			!system($cluster_command) or die "Could not execute monte_carlo_simulation.pl with: '$cluster_command'\n";
+			$qc = '';
+		}
+	}
+		
+	#Submit the collate the data scripts
+	if($config{simulations} > $batch_size){    #No need to collate if less or equal to batch_size
+		foreach my $file (@files){
+			my $jid = "monte_carlo.$file";
+			my $command = "$Bin/Monte_Carlo_Simulation/collate_monte_carlo_results.pl --prefix $file --simulations $simulations_per_batch --sleep 120  $file.MonteCarloResults.*";
+			my $cluster_command = "qsub -l h_vmem=100G -hold_jid $jid -N collate.monte_carlo.$file -o collate_monte_carlo.$file.out $command";    #Cluster commands with identical names
+			!system($cluster_command) or die "Could not execute collate_monte_carlo_results.pl with: '$cluster_command'\n";
+		}
+	}
+}
+
+__DATA__
+
+CloseCall
+
+SYNOPSIS
+
+CloseCall is a pipeline for mapping, QC and analysis of RNA complex experiments
+
+CloseCall [OPTIONS]... [FILES]
+
+
+FUNCTION
+
+Pre-processes, maps, filters and produce QC reports on RNA complexes data. 
+Also performs a Monte Carlo simulation to identify statistically significant 
+RNA-RNA interactions.
+
+
+COMMAND LINE OPTIONS
+
+--config              Configuration file
+--gene_list           Tab-delimited file listing features and repeats:
+                      Chromosome   Start   End   Feature_Name
+                      This uses a 1-based co-ordinate system. Repeats are 
+                      allocated to both strands with term 'B' (regular features
+                      are allocated to + or - strands)
+                      Default: $Bin/Data/human38_repeats_RNA45S5.txt.gz
+--map                 Perform the mapping and QC pipeline
+--multiple            Multiple testing correction. Specify TWO files to process, 
+                      1) a results file and 2) a control file. The results file may 
+                      be used as the control, or even better, use the simulated 
+                      results of a random dataset	
+--noqc                Do not run the QC component of the Monte Carlo Simulation.  This option
+                      will reduce times.  As an alternative, run a separate simulation (e.g. 100
+                      runs to generate the QC information.)					  
+--genome              Path and basename of HISAT2 genome indices
+                      Default: $Bin/Data//hg38_LSU_SSU_Masked_RNA45S5
+--help                Print help message and exit
+--random              Create a random dataset, ready for Monte Carlos Simulation analysis
+--simulations         Accepts integer for the number of simulations to perform
+--splice_sites        HISAT2 genome splice sites
+--version             Print the program version and exit
+
+Steven Wingett, Babraham Institute, Cambridge, UK (steven.wingett@babraham.ac.uk)
