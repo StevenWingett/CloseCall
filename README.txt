@@ -1,4 +1,4 @@
 ****************************CloseCall****************************
 
-Pipeline for processing RNA-RNA interactions data.
+Pipeline for processing RNA-RNA proximity data.
 See Markdown documentation for more details.
