@@ -118,18 +118,3 @@ When creating a random dataset the complex valency and the feature frequency are
 It is important to note that while the feature-complex allocation was random, there was a constraint in terms of a given feature could not be allocated to a complex already containing that feature.
 
 ![Simulation Schematic](./simulation.png)
-
-
-
-##Structural Modelling
-As part of the project, multi-cell HiC datasets have been used to create 3-D structural models.  CloseCall essentially serves as a wrapper for the tool [MOGEN](https://www.ncbi.nlm.nih.gov/pubmed/26722115), by parsing HiCUP output BAM/SAM files and then passing to MOGEN, along with pre-selected modelling parameters.  The produced models (PDB format) may be modified by additional scripts for the visualisation of pre-defined features (e.g. PCA-identified Hi-C A/B domains, or high-valency regions).
-
-
-
-
-
-
-
-
-
-
