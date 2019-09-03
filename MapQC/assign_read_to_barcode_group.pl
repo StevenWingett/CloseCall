@@ -1,5 +1,27 @@
 #!/usr/bin/perl
 
+###################################################################################
+###################################################################################
+##This file is Copyright (C) 2019, Steven Wingett (steven.wingett@babraham.ac.uk)##
+##                                                                               ##
+##                                                                               ##
+##This file is part of CloseCall.                                                ##
+##                                                                               ##
+##CloseCall is free software: you can redistribute it and/or modify              ##
+##it under the terms of the GNU General Public License as published by           ##
+##the Free Software Foundation, either version 3 of the License, or              ##
+##(at your option) any later version.                                            ##
+##                                                                               ##
+##CloseCall is distributed in the hope that it will be useful,                   ##
+##but WITHOUT ANY WARRANTY; without even the implied warranty of                 ##
+##MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                  ##
+##GNU General Public License for more details.                                   ##
+##                                                                               ##
+##You should have received a copy of the GNU General Public License              ##
+##along with CloseCall.  If not, see <http://www.gnu.org/licenses/>.             ##
+###################################################################################
+###################################################################################
+
 ##############################################################################
 #Perl script takes a read and extracts the barcode (in-line, 26bps) from
 #the read (single-end) and places it in the header of the read. 
