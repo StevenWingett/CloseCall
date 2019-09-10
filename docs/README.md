@@ -1,33 +1,66 @@
-#Don't Panic: CloseCall#
+# CloseCall: pipeline for processing RNA-RNA proximity data
 
-CloseCall is a bioinformatics pipeline for identifying RNA-RNA interactions in NGS datasets generated using a new high-throughput protocol to fix and sequence RNA complexes. The CloseCall pipeline has 3 main components:
+CloseCall is a bioinformatics pipeline for identifying RNA-RNA interactions in NGS datasets generated using a new high-throughput protocol named Proximity RNA-seq to fix and sequence RNA complexes. 
 
-1.  Mapping and QC
-2.  Monte Carlo Simulation to identify statistically significant RNA-RNA interactions
-3.  Chromosome and whole genome structural modelling
+The CloseCall pipeline has 2 main components:
+
+1. Mapping and QC
+2. Monte Carlo Simulation to identify statistically significant RNA-RNA interactions
 
 
-##Experimental Procedure##
+## Experimental overview
 
-The method to measure RNA-RNA proximity relies on the tagging of the set of RNA molecules contained in an individual chromatin complex with a unique DNA barcode. To tag many chromatin complexes in a highly parallel fashion, we apply picodroplet water-in-oil emulsions. Subsequent deep sequencing of all barcodes from all complexes and the RNA molecules attached to these barcodes enables the reconstruction of the chromatin complexes and therefore of RNA proximities in cell nuclei.
+The method to measure RNA-RNA proximities relies on the tagging of the set of RNA molecules contained in an individual chromatin complex with a unique DNA barcode. To tag many chromatin complexes in a highly parallel fashion uses picodroplet water-in-oil emulsions. Subsequent deep sequencing of all barcodes from all complexes and the RNA molecules attached to these barcodes enables the reconstruction of the chromatin complexes, enabling inferences to be made regarding RNA proximities in cell nuclei.
 
-An emulsion PCR protocol has been developed to generate magnetic beads that are covered with hundred thousands of copies of a single DNA barcode. This technique is based on the compartmentalization of a single DNA template, here randomly synthesized barcode, and a bead covered with immobilized primers in a droplet of a water-in-oil emulsion. Then the PCR reaction is carried out in emulsion. The one-to-one ratio of template to bead in droplets is an approximation based on diluting the components sufficiently before enclosing into droplets according to Poisson statistics. The random barcode length used is 26 bases, which results in approximately 4^26 = 4.5x10^15 unique barcodes, which largely overcomes the complexity of chromatin complexes sequenced in an experiment. The ensemble of beads is then recovered from the emulsion and barcode ends extended to generate random single-stranded ends.
+We developed an emulsion PCR protocol to generate magnetic beads that are covered with thousands of copies of a single DNA barcode. This technique is based on the compartmentalisation of a single DNA template, here randomly synthesised barcode, and a bead covered with immobilised primers in a droplet of a water-in-oil emulsion. Then the PCR reaction is carried out in emulsion. The one-to-one ratio of template to bead in droplets is an approximation based on diluting the components sufficiently before enclosing into droplets according to Poisson statistics. The random barcode length used is 26 bases, which results in approximately 4^26 = 4.5x10^15 unique barcodes, which largely overcomes the complexity of chromatin complexes sequenced in an experiment. The ensemble of beads is then recovered from the emulsion and barcode ends extended to generate random single-stranded ends.
 ![Experimental Protocol Schematic](./protocol_schematic.png)
 
 The chromatin complexes are obtained by sonication of crosslinked nuclei, optionally after additional purification on a sucrose gradient or using a gel retardation assay in an attempt to reduce single, non-interacting RNA fragments. Subsequently, chromatin complexes are separately enclosed into droplets in water-in-oil emulsions together with beads covered by DNA barcodes. Optimally, one chromatin complex is tagged with one barcode sequence in such a droplet. 
 
-The single-stranded random sequences at the tails of DNA barcodes on beads allow for randomly primed reverse transcription of RNA molecules. This step is executed in emulsion and converts RNA into cDNA immobilized on beads and introduces a barcode at the end of each cDNA fragment. After recovering the RNA-containing chromatin complexes linked to beads, crosslinks are reversed and sequencing libraries generated from nucleic acids harboring bead barcodes. Finally, sequenced nucleic acids are grouped according to barcodes at their ends to reconstruct contacts between them, chromatin complexes, and nuclear architecture.
+The single-stranded random sequences at the tails of DNA barcodes on beads allow for randomly primed reverse transcription of RNA molecules. This step is executed in emulsion and converts RNA into cDNA immobilised on beads and introduces a barcode at the end of each cDNA fragment. After recovering the RNA-containing chromatin complexes linked to beads, crosslinks are reversed and sequencing libraries generated from nucleic acids harbouring bead barcodes. Finally, sequenced nucleic acids are grouped according to barcodes at their ends to reconstruct contacts between them, chromatin complexes, and nuclear architecture.
+
 ![Construct](./construct.png)
 
 
 
-##Mapping and QC pipeline summary##
+## Mapping and QC pipeline summary
 
+### Dependencies 
 
-The anaconda master script regulates data flow through each of the following pipeline steps:
+1.  A Linux operating system
 
+2.  A recent version of [Perl](https://www.perl.org/). The following non-core Perl modules should also be installed: Math::Round, 
 
-###Create annotation features###
+4.  A recent version of [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2)
+5.  A recent version of [HISAT2](https://ccb.jhu.edu/software/hisat2)
+5.  A recent version of [FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen)
+
+These software tools should be in your [path](http://www.linfo.org/path_env_var.html).
+
+So long as the bioinformatic tools listed above typically work comfortably for you, then your system should meet the necessary memory and processing capabilities needed for CloseCall mapping and QC.
+
+### Running the pipeline
+
+Pre-constructed HISAT2 Human 38 genomic index files, splice sites and transcript co-ordinates may be downloaded from [here](https://osf.io/mwd73).  In addition, a test dataset may also be downloaded from here, to check that CloseCall works on your system.
+
+A virtual machine running CloseCall in a Linux environment may also be downloaded from this webpage. 
+
+The simplest way to run the pipeline is to create a configuration file i) listing the path and basename of the HISAT2 genome index files; 2) the HISAT2 splice site positions file and 3) the genome annotation file listing transcript positions.
+>gene_list: /bi/home/wingetts/anaconda/Data/human38_repeats_RNA45S5.txt.gz
+
+>genome:   /bi/home/wingetts/anaconda/Data/hg38_LSU_SSU_Masked_RNA45S5
+
+>splice_sites: /bi/home/wingetts/anaconda/Data/Homo_sapiens.GRCh38.78.hisat2_splices.txt
+
+To run the mapping and QC CloseCall pipeline, enter on the command line:
+
+```CloseCall --map --conf [Configuration File] [FASTQ files to process]```
+
+### Pipeline Steps
+
+The CloseCall master script regulates data flow through each of the following pipeline steps:
+
+#### Create annotation features
 
 1. Generates a features list of all gene/repeat locations. Regions of overlapping features are denoted as: a/b etc. How CloseCall generates features:
 	* Takes SeqMonk annotation and ENSEMBL repeat list (Human Genome 38)
@@ -46,7 +79,7 @@ The anaconda master script regulates data flow through each of the following pip
 3. Previous work shows that reads generated by PANIC often are not derived from the human genome.  These may comprise sequencing adapters or low-complexity polynucleotide sequence. Consequently, the (trimmed i.e. 20bps) barcode sequence is determined and sequences with an extreme A:G:C:T proportion are removed (if one of the bases occurs 13 times the polynucleotide is considered extreme - assumes a random nucleotide has a 25% split of each base and threshold set using a binomial distribution).  Also aligns the barcode against possible sources of contamination e.g. adapter sequences (same contamination sequences as used by FastQC).
 **Script: problem\_barcodes.pl**
 
-4. Theoretically, each barcode should represent a single complex. Because of sequencing errors a single barcode may be mis-identified.  This is problematic as it may lead to the generation of non-existent barcodes, and consequently lead to incorrect inferences being drawn regarding RNA-RNA interactions.  To overcome this individual barcode were assigned to a "barcode group" - a group of very closely related sequences.  This was achieved by creating a virtual reference genome of the barcodes and then mapping (using Bowtie2) each barcode against this to establish 'Barcode Group'. The script then builds the indices and maps the barcode against these. (The barcode are trimmed by 3bp at either end before mapping to overcome potential "wobble" problems).  Reads containing an N in the barcdoe sequence were discarded.
+4. Theoretically, each barcode should represent a single complex. Because of sequencing errors a single barcode may be mis-identified.  This is problematic as it may lead to the generation of non-existent barcodes, and consequently lead to incorrect inferences being drawn regarding RNA-RNA interactions.  To overcome this individual barcode were assigned to a "barcode group" - a group of very closely related sequences.  This was achieved by creating a virtual reference genome of the barcodes and then mapping (using Bowtie2) each barcode against this to establish 'Barcode Group'. The script then builds the indices and maps the barcode against these. (The barcode are trimmed by 3bp at either end before mapping to overcome potential "wobble" problems).  Reads containing an N in the barcode sequence were discarded.
 **Script: map\_trimmed\_barcodes.pl**
 
 
@@ -118,3 +151,38 @@ When creating a random dataset the complex valency and the feature frequency are
 It is important to note that while the feature-complex allocation was random, there was a constraint in terms of a given feature could not be allocated to a complex already containing that feature.
 
 ![Simulation Schematic](./simulation.png)
+
+### Dependencies 
+
+1.  A Linux operating system
+2.  A recent version of Java
+
+### Running the simulation
+
+```java -XX:+UseG1GC -XX:ParallelGCThreads=2 -jar anacondamontecarlo.jar [Input File] [Number of simulations]```
+
+To generate a random dataset, add the option 'random'.  To generate QC plots, add the option
+'qc'.
+
+If running on a GridEngine compute cluster, we would recommend using the CloseCall script to perform the Monte Carlo Simulations.
+
+```CloseCall --simulations [Number of simulations] [Input file]```
+
+This will qsub the jobs to your cluster.  To generate a random dataset, specify the option --random.
+
+To compare "real" simulation results against those when using an initial random dataset, run the command:
+
+```multiple_testing_correction.pl --control [Random Monte Carlo Results] --results [Real Monte Carlo Results]```
+
+
+## Links
+* Proximity RNA-seq Publication:
+    * https://www.ncbi.nlm.nih.gov/pubmed/31267103
+
+
+## Credits
+CloseCall was written by Steven Wingett, part of the [Babraham Bioinformatics](http://www.bioinformatics.babraham.ac.uk) group.
+
+
+## License
+GNU General Public License v3.0
