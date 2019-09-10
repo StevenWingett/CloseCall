@@ -95,7 +95,7 @@ The CloseCall master script regulates data flow through each of the following pi
 **Script : trim.pl**
 
 
-###Mapping
+### Mapping
 1. Perform a Fastq Screen against the Human 38 genome and a Human Repeats Ensembl NMasked genome.  [FastQ Screen](http://www.bioinformatics.babraham.ac.uk/projects/fastq_screen) in widely used QC tool and provides a quick overview to which reference genomes the sequenced reads align i.e. are the sequences derived from a ribosomal origin, or the rest of the genome. 
 
 
@@ -124,7 +124,7 @@ Barcode Chromosome Position Strand
 	* To generate cis Hi-C distance plots ran cis_length_calc.pl on the condensed file format generated in step 7 and then ran cis_read_separation_boxplots.r on the newly generated dataset. 
 
 
-###Feature-feature interactions
+### Feature-feature interactions
 1. Match reads to pre-defined genes/features.
 **Script: identify\_reads\_by\_regions.pl**
 
@@ -143,7 +143,7 @@ Barcode Chromosome Position Strand
 6. Create an CloseCall summary file listing the key results from the pipeline
 
 
-##Monte Carlo Simulation
+## Monte Carlo Simulation
 The Monte Caro Simulation models the distribution of the features between the complexes and then randomises features distribution and records how frequently an interaction is seen in the real dataset as compared with the randomised dataset.  This enables the calculation of the probability of a given interaction being observed by chance. 
 
 When creating a random dataset the complex valency and the feature frequency are determined by selecting from a distribution matching the real data. Alternatives methods were tried (e.g. fixing frequency number), but this method was most efficient in terms of processing time.
