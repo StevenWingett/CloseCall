@@ -29,11 +29,19 @@ The single-stranded random sequences at the tails of DNA barcodes on beads allow
 
 1.  A Linux operating system
 
-2.  A recent version of [Perl](https://www.perl.org/). The following non-core Perl modules should also be installed: Math::Round, 
+2.  A recent version of [Perl](https://www.perl.org/). The following non-core Perl modules should also be installed: Math::Round, String::Approx (this may require libc6-dev), PDL::LiteF, PDL::Stats (for PDL::Stats::Distr)
 
-4.  A recent version of [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2)
-5.  A recent version of [HISAT2](https://ccb.jhu.edu/software/hisat2)
+3.  A recent version of [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2)
+
+4.  A recent version of [HISAT2](https://ccb.jhu.edu/software/hisat2)
+
 5.  A recent version of [FastQ Screen](https://www.bioinformatics.babraham.ac.uk/projects/fastq_screen)
+
+6. A recent version of [R](https://www.r-project.org)
+
+7. The Perl Data Language [pdl](http://pdl.perl.org) on your system.
+
+8. [GNU Scientific Library (GSL).](https://www.gnu.org/software/gsl)  **We recommend using GSL 2.4.**
 
 These software tools should be in your [path](http://www.linfo.org/path_env_var.html).
 
@@ -153,13 +161,14 @@ It is important to note that while the feature-complex allocation was random, th
 ![Simulation Schematic](./simulation.png)
 
 ### Dependencies 
+In addition to the dependencies described above, to run the simulation you will need:
 
-1.  A Linux operating system
-2.  A recent version of Java
+1.  A recent version of [Java](https://www.java.com)
+2.  The Perl module Math::CDF
 
 ### Running the simulation
 
-```java -XX:+UseG1GC -XX:ParallelGCThreads=2 -jar anacondamontecarlo.jar [Input File] [Number of simulations]```
+```java -jar anacondamontecarlo.jar [Input File] [Number of simulations]```
 
 To generate a random dataset, add the option 'random'.  To generate QC plots, add the option
 'qc'.
