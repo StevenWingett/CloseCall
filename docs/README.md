@@ -29,7 +29,7 @@ The single-stranded random sequences at the tails of DNA barcodes on beads allow
 
 1.  A Linux operating system
 
-2.  A recent version of [Perl](https://www.perl.org/). The following non-core Perl modules should also be installed: Math::Round, String::Approx (this may require libc6-dev), PDL::LiteF, PDL::Stats (for PDL::Stats::Distr)
+2.  A recent version of [Perl](https://www.perl.org/). The following non-core Perl modules should also be installed: Math::Round, String::Approx (this may require libc6-dev), PDL::LiteF, PDL::Stats (for PDL::Stats::Distr), GD::Graph (which may require libgd-gd2-perl).
 
 3.  A recent version of [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2)
 
@@ -59,6 +59,9 @@ The simplest way to run the pipeline is to create a configuration file i) listin
 >genome:   /bi/home/wingetts/anaconda/Data/hg38_LSU_SSU_Masked_RNA45S5
 
 >splice_sites: /bi/home/wingetts/anaconda/Data/Homo_sapiens.GRCh38.78.hisat2_splices.txt
+
+CloseCall uses FastQ Screen for a QC step.  Place the suitably edited configuration file 'fastq_screen.conf' in the folder 'MapQC'.
+
 
 To run the mapping and QC CloseCall pipeline, enter on the command line:
 
