@@ -81,7 +81,7 @@ The CloseCall master script regulates data flow through each of the following pi
 	* Repeats positioned on BOTH strands and take priority over other features
 ![Designing Features](./designing_features.png)
 
-**Script: format\_features\_list.pl**
+**Script: create\_features\_list.pl**
 
 ###Validate reads and assign barcodes###
 2. Valid reads should contain a fixed sequence 'GACACGCAGGGATGAGATGG', after the 26-bp random barcode (as shown in the schematic below). The script allows for a 10% mismatch rate when comparing bases at position 27-46 to the fixed sequence above.  Reads not containing this, or closeely related sequence, are discarded. 
